@@ -1,0 +1,66 @@
+.TH SUPERCOMMAND 1 "December 2024" "Version 1.0" "System Programming Tool"
+.SH NAME
+supercommand \- A custom Linux command for file, directory, and keylogger operations
+.SH SYNOPSIS
+.B supercommand
+.RI "-m <mode> <operation> [arguments]"
+.SH DESCRIPTION
+.B supercommand
+is a system programming tool that allows users to perform file operations, directory operations, and log keystrokes.
+
+Available operations:
+.IP \[bu]
+File operations:
+.RS
+.IP \[em] 1
+Create or open a file.
+.IP \[em] 2
+Change file permissions.
+.IP \[em] 3
+Read a file.
+.IP \[em] 4
+Write to a file.
+.IP \[em] 5
+Delete a file.
+.RE
+
+.IP \[bu]
+Directory operations:
+.RS
+.IP \[em] 1
+Create a directory.
+.IP \[em] 2
+Delete a directory.
+.IP \[em] 3
+Print the current working directory.
+.IP \[em] 4
+List files in the directory.
+.RE
+
+.IP \[bu]
+Keylogger operations:
+.RS
+.IP \[em] 1
+Run a keylogger in the background and save keystrokes to a file.
+.RE
+
+.SH EXAMPLES
+To create a file:
+.EX
+./supercommand -m 1 1 myfile.txt
+.EE
+
+To list the contents of the current directory:
+.EX
+./supercommand -m 2 4 .
+.EE
+
+To start a keylogger:
+.EX
+./supercommand -m 3 keylog.txt
+.EE
+
+.SH AUTHOR
+System Programming Group Project Team
+.SH BUGS
+Report bugs to your course instructor.
