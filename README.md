@@ -4,13 +4,13 @@ Project Description
 Command line tool for file operations, directory operations, and keylogging.
 
 Team Members
-1. Ian
-2. Daniel
-3. Fatin
-4. Atul
+Ian Nathaniel Puang Xi Yuan
+Daniel Aiman Fiqri Bin Hut
+Saidatulnisya Binti Rahim
+Fatin Nazifa Binti Shahrin
 
 How to Compile
-gcc -o supercommand src/supercommand.c
+gcc supercommand.c -o supercommand
 
 How to Run
-./supercommand -m [mode] [operation] [parameters]
+sudo ./supercommand 
